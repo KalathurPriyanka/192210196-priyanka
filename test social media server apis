@@ -1,0 +1,177 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom';
+import { Container, ListGroup, ListGroupItem, Navbar, Nav } from 'react-bootstrap';
+
+// Random image generator function for posts and users
+const getRandomImage = () => {
+  const images = [
+    'https://source.unsplash.com/random/200x200',
+    'https://picsum.photos/200',
+    'https://placeimg.com/200/200/tech',
+  ];
+  return images[Math.floor(Math.random() * images.length)];
+};
+
+// Top Users Page - Display the top 5 users with the most commented posts
+const TopUsers = () => {
+  const [topUsers, setTopUsers] = useState([]);
+
+  useEffect(() => {
+    // Fetch posts data from API
+    axios.get('http://localhost:3001/api/posts')
+      .then(response => {
+        const posts = response.data;
+
+        // Count comments for each user
+        const userCommentCount = {};
+
+        posts.forEach(post => {
+          const commentCount = post.comments ? post.comments.length : 0;
+          if (userCommentCount[post.userId]) {
+            userCommentCount[post.userId] += commentCount;
+          } else {
+            userCommentCount[post.userId] = commentCount;
+          }
+        });
+
+        // Fetch users and sort by most commented posts
+        axios.get('http://localhost:3001/api/users')
+          .then(usersResponse => {
+            const users = usersResponse.data;
+            const sortedUsers = Object.entries(userCommentCount)
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, 5);
+
+            const topUsersData = sortedUsers.map(([userId, commentCount]) => {
+              const user = users.find(user => user.id === userId);
+              return {
+                name: user ? user.name : 'Unknown',
+                commentsCount: commentCount,
+              };
+            });
+
+            setTopUsers(topUsersData);
+          });
+      })
+      .catch(error => console.error('Error fetching posts data:', error));
+  }, []);
+
+  return (
+    <Container>
+      <h2>Top 5 Users with Most Commented Posts</h2>
+      <ListGroup>
+        {topUsers.map((user, index) => (
+          <ListGroupItem key={index}>
+            <strong>{user.name}</strong> - {user.commentsCount} comments
+          </ListGroupItem>
+        ))}
+      </ListGroup>
+    </Container>
+  );
+};
+
+// Trending Posts Page - Display the post(s) with the most comments
+const TrendingPosts = () => {
+  const [trendingPosts, setTrendingPosts] = useState([]);
+
+  useEffect(() => {
+    axios.get('http://localhost:3001/api/posts')
+      .then(response => {
+        const posts = response.data;
+        let maxComments = 0;
+        let topPosts = [];
+
+        // Identify posts with the most comments
+        posts.forEach(post => {
+          const commentCount = post.comments ? post.comments.length : 0;
+          if (commentCount > maxComments) {
+            maxComments = commentCount;
+            topPosts = [post];  // Reset to the new most commented post
+          } else if (commentCount === maxComments) {
+            topPosts.push(post);  // Add to the list of posts with the same max comment count
+          }
+        });
+
+        setTrendingPosts(topPosts);
+      })
+      .catch(error => console.error('Error fetching posts data:', error));
+  }, []);
+
+  return (
+    <Container>
+      <h2>Trending Posts</h2>
+      <ListGroup>
+        {trendingPosts.map((post, index) => (
+          <ListGroupItem key={index}>
+            <h4>{post.title}</h4>
+            <p>{post.body}</p>
+            <small>{post.comments ? post.comments.length : 0} comments</small>
+          </ListGroupItem>
+        ))}
+      </ListGroup>
+    </Container>
+  );
+};
+
+// Feed Page - Display posts in real-time
+const Feed = () => {
+  const [posts, setPosts] = useState([]);
+
+  const fetchPosts = () => {
+    axios.get('http://localhost:3001/api/posts')
+      .then(response => {
+        const sortedPosts = response.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        setPosts(sortedPosts);
+      })
+      .catch(error => console.error('Error fetching posts:', error));
+  };
+
+  useEffect(() => {
+    fetchPosts();  // Initial fetch
+    const interval = setInterval(fetchPosts, 10000);  // Poll every 10 seconds
+
+    return () => clearInterval(interval);  // Clean up interval on component unmount
+  }, []);
+
+  return (
+    <Container>
+      <h2>Live Feed</h2>
+      <ListGroup>
+        {posts.map((post, index) => (
+          <ListGroupItem key={index}>
+            <h4>{post.title}</h4>
+            <p>{post.body}</p>
+            <small>{post.comments ? post.comments.length : 0} comments</small>
+          </ListGroupItem>
+        ))}
+      </ListGroup>
+    </Container>
+  );
+};
+
+// Main App Component with React Router
+const App = () => {
+  return (
+    <Router>
+      <Container>
+        <Navbar bg="light" expand="lg">
+          <Navbar.Brand href="/">Social Media Analytics</Navbar.Brand>
+          <Nav className="mr-auto">
+            <Nav.Link as={Link} to="/">Feed</Nav.Link>
+            <Nav.Link as={Link} to="/top-users">Top Users</Nav.Link>
+            <Nav.Link as={Link} to="/trending">Trending Posts</Nav.Link>
+          </Nav>
+        </Navbar>
+
+        <Routes>
+          <Route path="/" element={<Feed />} />
+          <Route path="/top-users" element={<TopUsers />} />
+          <Route path="/trending" element={<TrendingPosts />} />
+        </Routes>
+      </Container>
+    </Router>
+  );
+};
+
+export default App;
