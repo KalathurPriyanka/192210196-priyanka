@@ -1,0 +1,56 @@
+from flask import Flask, jsonify
+import requests
+import time
+
+app = Flask(_name_)
+
+
+WINDOW_SIZE = 10
+numbers_store = []
+
+
+def fetch_numbers(number_id):
+    url = f"http://third-party-server/numbers/{number_id}"
+    try:
+        response = requests.get(url, timeout=0.5)
+        if response.status_code == 200:
+            return response.json()
+    except requests.exceptions.RequestException:
+        return None
+
+
+def calculate_average(numbers):
+    if numbers:
+        return sum(numbers) / len(numbers)
+    return 0
+
+@app.route('/numbers/<string:number_id>', methods=['GET'])
+def get_numbers(number_id):
+    global numbers_store
+
+    fetched_numbers = fetch_numbers(number_id)
+    
+    if fetched_numbers is None:
+        return jsonify({"error": "Failed to fetch numbers"}), 500
+
+
+    for number in fetched_numbers:
+        if number not in numbers_store:
+            numbers_store.append(number)
+            if len(numbers_store) > WINDOW_SIZE:
+                numbers_store.pop(0)  # Remove the oldest number
+
+  
+    window_prev_state = numbers_store[:-len(fetched_numbers)] if len(numbers_store) > len(fetched_numbers) else []
+    window_curr_state = numbers_store
+    avg = calculate_average(window_curr_state)
+
+    return jsonify({
+        "windowPrevState": window_prev_state,
+        "windowCurrState": window_curr_state,
+        "numbers": fetched_numbers,
+        "avg": round(avg, 2)
+    })
+
+if _name_ == '_main_':
+    app.run(port=9876)
